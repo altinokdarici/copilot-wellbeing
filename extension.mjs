@@ -1,5 +1,7 @@
 // Extension: wellbeing
-// A wellbeing check-in tool: warm nudges to step back, breathe, hydrate, and stretch.
+// A passive reminder that nudges you to step back, breathe, hydrate, and stretch
+// after you've been heads-down for a while. No tools, no model turns — it just
+// prints a gentle note to the timeline when you've been idle.
 
 import { joinSession } from "@github/copilot-sdk/extension";
 
@@ -14,35 +16,15 @@ const OPENERS = [
     "A gentle nudge from your future, less-stiff self.",
 ];
 
-const BODY = {
-    breathe: [
-        "Take one slow breath in, and a longer one out.",
-        "Unclench your jaw and drop your shoulders.",
-        "Three deep breaths — in through the nose, out slowly.",
-    ],
-    hydrate: [
-        "When did you last drink some water? Maybe now's the time.",
-        "Refill that glass — your brain runs on hydration.",
-        "Grab some water before the next deep dive.",
-    ],
-    stretch: [
-        "Stand up, reach for the ceiling, and roll your shoulders back.",
-        "Give your wrists and neck a slow stretch.",
-        "A quick walk to the window resets more than you'd think.",
-    ],
-    eyes: [
-        "Look at something 20 feet away for 20 seconds — your eyes will thank you.",
-        "Blink, soften your gaze, and let your eyes rest off-screen for a moment.",
-    ],
-    posture: [
-        "Reset your posture: feet flat, back tall, screen at eye level.",
-        "Notice how you're sitting — ease back into a comfortable, upright position.",
-    ],
-    break: [
-        "Maybe this is a good spot to take a real break.",
-        "Step away for five minutes; you'll come back sharper.",
-    ],
-};
+const BODY = [
+    "Take one slow breath in, and a longer one out.",
+    "Unclench your jaw and drop your shoulders.",
+    "When did you last drink some water? Maybe now's the time.",
+    "Stand up, reach for the ceiling, and roll your shoulders back.",
+    "Look at something 20 feet away for 20 seconds — your eyes will thank you.",
+    "Reset your posture: feet flat, back tall, screen at eye level.",
+    "Step away for five minutes; you'll come back sharper.",
+];
 
 const CLOSERS = [
     "There's a whole life beyond the terminal — it'll still be here when you return.",
@@ -52,49 +34,23 @@ const CLOSERS = [
     "Future-you, well-rested, says thanks.",
 ];
 
-const FOCI = Object.keys(BODY);
-
 function pick(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function buildCheckin(focus) {
-    const key = focus && focus !== "random" && BODY[focus] ? focus : pick(FOCI);
-    return [pick(OPENERS), pick(BODY[key]), pick(CLOSERS)].join(" ");
+function buildCheckin() {
+    return [pick(OPENERS), pick(BODY), pick(CLOSERS)].join(" ");
 }
 
-const session = await joinSession({
-    tools: [
-        {
-            name: "wellbeing_checkin",
-            description:
-                "Return a short, warm, varied wellbeing check-in (2-3 sentences) nudging the user " +
-                "to step back, breathe, hydrate, stretch, rest their eyes, or fix their posture. " +
-                "Use when the user asks for a wellbeing nudge, a 'how is life' reminder, or a break prompt.",
-            parameters: {
-                type: "object",
-                properties: {
-                    focus: {
-                        type: "string",
-                        description: "Optional area to emphasize; defaults to a random pick.",
-                        enum: [...FOCI, "random"],
-                    },
-                },
-            },
-            // No side effects — just returns text, so don't prompt the user for permission.
-            skipPermission: true,
-            handler: async (args) => buildCheckin(args?.focus),
-        },
-    ],
-});
+const session = await joinSession({});
 
-await session.log("wellbeing extension loaded — call wellbeing_checkin for a warm nudge");
+await session.log("wellbeing extension loaded — gentle idle reminders are on");
 
 // --- Self-scheduling idle nudges -------------------------------------------
-// Instead of relying on the CLI's /schedule, the extension runs its own timer.
-// `session.log` prints straight to the timeline with NO model turn (no cost, no
-// interruption). We only nudge after a stretch of inactivity so it never talks
-// over you mid-task. Configure the cadence with WELLBEING_INTERVAL_MIN (default 60).
+// The extension runs its own timer. `session.log` prints straight to the
+// timeline with NO model turn (no cost, no interruption). We only nudge after a
+// stretch of inactivity so it never talks over you mid-task. Configure the
+// cadence with WELLBEING_INTERVAL_MIN (default 60).
 const intervalMin = Math.max(1, Number(process.env.WELLBEING_INTERVAL_MIN ?? 60));
 const intervalMs = intervalMin * 60_000;
 
@@ -111,7 +67,7 @@ const timer = setInterval(async () => {
         return; // you've been active recently — stay quiet
     }
     lastActivityAt = Date.now();
-    await session.log(`🌿 ${buildCheckin("random")}`);
+    await session.log(`🌿 ${buildCheckin()}`);
 }, Math.min(intervalMs, 60_000));
 // Don't let the timer alone keep the process alive; the CLI owns the lifecycle.
 timer.unref?.();

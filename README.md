@@ -14,11 +14,7 @@ Restart `copilot` and it loads automatically.
 
 ## Use
 
-Ask Copilot for a nudge:
-
-> how is life?
-
-Or let the built-in timer remind you when you've been idle for a while. Tune the cadence with `WELLBEING_INTERVAL_MIN` (default `60`).
+There's nothing to do — once installed, it quietly nudges you to take a break when you've been idle for a while. Tune the cadence with `WELLBEING_INTERVAL_MIN` (default `60`).
 
 ## License
 
