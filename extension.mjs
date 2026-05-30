@@ -7,11 +7,11 @@
 
 import { joinSession } from "@github/copilot-sdk/extension";
 
-// How much work has to pile up before a transition is worth a nudge.
-const MIN_TURNS = Math.max(1, Number(process.env.WELLBEING_MIN_TURNS ?? 8));
-const MIN_WORK_MIN = Math.max(1, Number(process.env.WELLBEING_MIN_WORK_MIN ?? 25));
+// How long you have to be at it before a transition is worth a nudge.
+// This is a hard floor on elapsed work time — never nudge sooner (min 60 min).
+const MIN_WORK_MIN = Math.max(60, Number(process.env.WELLBEING_MIN_WORK_MIN ?? 60));
 // A long, intense push earns a warmer "that was a lot" message.
-const BIG_TURNS = MIN_TURNS * 2;
+const BIG_TURNS = Math.max(1, Number(process.env.WELLBEING_MIN_TURNS ?? 16));
 const BIG_WORK_MIN = MIN_WORK_MIN * 2;
 
 function pick(arr) {
@@ -70,7 +70,7 @@ session.on("assistant.message", () => {
 session.on("user.message", async () => {
     if (workStartedAt === null) return; // nothing has happened yet
     const workMin = (Date.now() - workStartedAt) / 60_000;
-    const substantial = assistantTurns >= MIN_TURNS || workMin >= MIN_WORK_MIN;
+    const substantial = workMin >= MIN_WORK_MIN;
 
     // Reset for the next chunk regardless — this message starts fresh work.
     const snapshot = { turns: assistantTurns, workMin };

@@ -16,12 +16,12 @@ Restart `copilot` and it loads automatically.
 
 There's nothing to do. When you finish a solid chunk of work and start the next thing, it gently nudges you to take a breath — and stays quiet during quick back-and-forths. Late at night it suggests wrapping up instead.
 
-Tune how much work counts as "a chunk":
+Tune how long counts as "a chunk":
 
 | Env var | Default | Meaning |
 | --- | --- | --- |
-| `WELLBEING_MIN_TURNS` | `8` | Assistant turns of work before a nudge is worth it |
-| `WELLBEING_MIN_WORK_MIN` | `25` | ...or this many minutes of work, whichever comes first |
+| `WELLBEING_MIN_WORK_MIN` | `60` | Minutes of work before a nudge (hard floor — never less than 60) |
+| `WELLBEING_MIN_TURNS` | `16` | Turns that mark a session as a "big push" for a warmer message |
 
 ## License
 
