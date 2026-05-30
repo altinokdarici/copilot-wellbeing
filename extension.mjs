@@ -1,75 +1,83 @@
 // Extension: wellbeing
-// A passive reminder that nudges you to step back, breathe, hydrate, and stretch
-// after you've been heads-down for a while. No tools, no model turns — it just
-// prints a gentle note to the timeline when you've been idle.
+// A passive, smart reminder. Instead of a blind timer, it nudges you at a
+// natural seam: the moment you finish a chunk of work and start the next thing.
+// It only speaks up when the finished chunk was substantial, and it tailors the
+// message to context (a long push, a late night, or just a normal hand-off).
+// Everything runs via session.log — NO model turns, no interruptions.
 
 import { joinSession } from "@github/copilot-sdk/extension";
 
-// A small library of warm, varied check-in fragments. We assemble 2-3 of these
-// at random so the nudge feels fresh every time rather than canned.
-const OPENERS = [
-    "Hey — quick step back from the terminal.",
-    "Pause for a second; the code can wait.",
-    "Time for a tiny reset.",
-    "Checking in on the human behind the keyboard.",
-    "Breathe — you've earned a moment.",
-    "A gentle nudge from your future, less-stiff self.",
-];
-
-const BODY = [
-    "Take one slow breath in, and a longer one out.",
-    "Unclench your jaw and drop your shoulders.",
-    "When did you last drink some water? Maybe now's the time.",
-    "Stand up, reach for the ceiling, and roll your shoulders back.",
-    "Look at something 20 feet away for 20 seconds — your eyes will thank you.",
-    "Reset your posture: feet flat, back tall, screen at eye level.",
-    "Step away for five minutes; you'll come back sharper.",
-];
-
-const CLOSERS = [
-    "There's a whole life beyond the terminal — it'll still be here when you return.",
-    "The boxes will keep running while you take care of you.",
-    "Small pauses are how good work stays good.",
-    "You're doing great. Be kind to yourself.",
-    "Future-you, well-rested, says thanks.",
-];
+// How much work has to pile up before a transition is worth a nudge.
+const MIN_TURNS = Math.max(1, Number(process.env.WELLBEING_MIN_TURNS ?? 8));
+const MIN_WORK_MIN = Math.max(1, Number(process.env.WELLBEING_MIN_WORK_MIN ?? 25));
+// A long, intense push earns a warmer "that was a lot" message.
+const BIG_TURNS = MIN_TURNS * 2;
+const BIG_WORK_MIN = MIN_WORK_MIN * 2;
 
 function pick(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function buildCheckin() {
-    return [pick(OPENERS), pick(BODY), pick(CLOSERS)].join(" ");
+const NORMAL = [
+    "Nice — that's a wrap on that piece. Take a breath before the next one.",
+    "One thing done, another about to begin. Roll your shoulders back first.",
+    "Good hand-off point. Grab some water before you dive back in.",
+    "That chunk's behind you. A slow breath here makes the next bit sharper.",
+    "Before the next task: unclench your jaw, drop your shoulders, reset.",
+];
+
+const BIG_PUSH = [
+    "That was a solid stretch of work — genuinely. Stand up, stretch tall, and step away for five.",
+    "You just pushed through a lot. Your eyes and shoulders have earned a real break, not just a breath.",
+    "Big chunk done. Walk to the window, look at something far away, let your brain idle a minute.",
+    "That was a heavy push. Water, a stretch, and a few minutes off-screen before the next mountain.",
+];
+
+const LATE = [
+    "It's getting late — this might be a good one to call it a night on.",
+    "Late hour. Whatever's next will be easier after some sleep.",
+    "The terminal will keep till morning. Consider wrapping up soon.",
+    "It's late — be kind to tomorrow-you and think about heading to bed.",
+];
+
+function isLate() {
+    const h = new Date().getHours();
+    return h >= 23 || h < 5;
+}
+
+function buildNudge({ turns, workMin }) {
+    if (isLate()) return pick(LATE);
+    if (turns >= BIG_TURNS || workMin >= BIG_WORK_MIN) return pick(BIG_PUSH);
+    return pick(NORMAL);
 }
 
 const session = await joinSession({});
 
-await session.log("wellbeing extension loaded — gentle idle reminders are on");
+await session.log("wellbeing extension loaded — smart break nudges are on");
 
-// --- Self-scheduling idle nudges -------------------------------------------
-// The extension runs its own timer. `session.log` prints straight to the
-// timeline with NO model turn (no cost, no interruption). We only nudge after a
-// stretch of inactivity so it never talks over you mid-task. Configure the
-// cadence with WELLBEING_INTERVAL_MIN (default 60).
-const intervalMin = Math.max(1, Number(process.env.WELLBEING_INTERVAL_MIN ?? 60));
-const intervalMs = intervalMin * 60_000;
+// --- Transition-aware nudging ----------------------------------------------
+// We accumulate "work" (assistant turns + elapsed time) since the last nudge.
+// A new user.message marks a transition — you just finished and are starting
+// something new. If the finished chunk was substantial, that's when we nudge.
+let assistantTurns = 0;
+let workStartedAt = null;
 
-let lastActivityAt = Date.now();
-const bump = () => {
-    lastActivityAt = Date.now();
-};
-session.on("user.message", bump);
-session.on("assistant.message", bump);
+session.on("assistant.message", () => {
+    assistantTurns += 1;
+    workStartedAt ??= Date.now();
+});
 
-// Check frequently, but only emit once a full idle interval has elapsed.
-const timer = setInterval(async () => {
-    if (Date.now() - lastActivityAt < intervalMs) {
-        return; // you've been active recently — stay quiet
+session.on("user.message", async () => {
+    if (workStartedAt === null) return; // nothing has happened yet
+    const workMin = (Date.now() - workStartedAt) / 60_000;
+    const substantial = assistantTurns >= MIN_TURNS || workMin >= MIN_WORK_MIN;
+
+    // Reset for the next chunk regardless — this message starts fresh work.
+    const snapshot = { turns: assistantTurns, workMin };
+    assistantTurns = 0;
+    workStartedAt = null;
+
+    if (substantial) {
+        await session.log(`🌿 ${buildNudge(snapshot)}`);
     }
-    lastActivityAt = Date.now();
-    await session.log(`🌿 ${buildCheckin()}`);
-}, Math.min(intervalMs, 60_000));
-// Don't let the timer alone keep the process alive; the CLI owns the lifecycle.
-timer.unref?.();
-
-session.on("session.shutdown", () => clearInterval(timer));
+});
